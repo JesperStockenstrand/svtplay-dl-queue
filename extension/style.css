@@ -171,6 +171,7 @@ body.options { background: var(--page); font-size: 14px; }
 .setting-text label { font-weight: 600; display: block; }
 .setting-text p { color: var(--muted); margin: 3px 0 0; }
 .setting-text p.bad { color: var(--danger); }
+.setting-text p.example { font-size: 12.5px; line-height: 1.7; word-break: break-all; }
 .setting-control { flex-shrink: 0; }
 
 .options input[type="text"], .options input[type="number"], .options select {

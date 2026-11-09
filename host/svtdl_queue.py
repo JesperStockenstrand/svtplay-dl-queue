@@ -43,6 +43,7 @@ DEFAULT_CONFIG = {
     # Where to save
     "download_dir": "~/Downloads/svtplay-dl",
     "subfolder": False,
+    "episode_numbers": False,  # name files show.name.S01E05.episode.name.mp4
     "overwrite": False,
     # Video
     "resolution": "",  # "" = best available
@@ -70,6 +71,7 @@ DEFAULT_CONFIG = {
 CONFIG_SCHEMA = {
     "download_dir": ("str",),
     "subfolder": ("bool",),
+    "episode_numbers": ("bool",),
     "overwrite": ("bool",),
     "resolution": ("choice", "", "1080", "720", "480"),
     "output_format": ("choice", "mp4", "mkv"),
@@ -85,6 +87,10 @@ CONFIG_SCHEMA = {
     "binary": ("str",),
     "extra_args": ("args",),
 }
+
+# svtplay-dl file name template for "episode_numbers". svtplay-dl fills in
+# zero-padded numbers and drops the S..E.. part when a video has none.
+EPISODE_FILENAME = "{title}.S{season}E{episode}.{episodename}.{ext}"
 
 
 # --------------------------------------------------------------------------
@@ -185,6 +191,8 @@ def build_args(cfg, all_episodes=False):
     args = []
     if cfg.get("subfolder"):
         args.append("--subfolder")
+    if cfg.get("episode_numbers"):
+        args += ["--filename", EPISODE_FILENAME]
     if cfg.get("overwrite"):
         args.append("--force")
     if cfg.get("resolution"):

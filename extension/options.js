@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 
-const CHECKBOXES = ["subfolder", "overwrite", "all_subtitles", "thumbnail", "nfo",
+const CHECKBOXES = ["subfolder", "episode_numbers", "overwrite", "all_subtitles", "thumbnail", "nfo",
   "chapters", "include_clips", "notify"];
 const SELECTS = ["resolution", "output_format", "max_parallel"];
 const TEXTS = ["download_dir", "binary", "extra_args", "all_last"];
@@ -48,8 +48,27 @@ function fill(reply) {
   $("binary_help").classList.toggle("bad", !!config.binary && !reply.binary_ok);
 }
 
+// Example file names for the current naming and folder settings
+// (as produced by svtplay-dl 4.x).
+function updateExamples() {
+  const numbered = $("episode_numbers").checked;
+  const folders = $("subfolder").checked;
+  const ext = $("output_format").value || "mp4";
+  let episode = numbered
+    ? `show.name.S01E05.episode.name.${ext}`
+    : `show.name.s01e05.episode.name-1a2b3c4-svtplay.${ext}`;
+  let movie = numbered ? `movie.name.${ext}` : `movie.name-5d6e7f8-svtplay.${ext}`;
+  if (folders) {
+    episode = "show.name/" + episode;
+    movie = "movies/" + movie;
+  }
+  $("example_episode").textContent = episode;
+  $("example_movie").textContent = movie;
+}
+
 // "All languages" only matters when subtitles are downloaded.
 function updateDependent() {
+  updateExamples();
   const subs = document.querySelector('input[name="subtitles"]:checked');
   const off = !subs || subs.value === "none";
   $("all_subtitles").disabled = off;

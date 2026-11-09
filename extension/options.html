@@ -40,6 +40,15 @@
 
         <div class="setting">
           <div class="setting-text">
+            <label for="episode_numbers">Name episodes with S01E05</label>
+            <p>Gives episodes the season and episode number in the standard form that Plex, Jellyfin and Kodi recognize, and leaves out svtplay-dl's ID and site name. Films just get their title.</p>
+            <p class="example">Episode: <code id="example_episode"></code><br>Film: <code id="example_movie"></code></p>
+          </div>
+          <div class="setting-control"><input id="episode_numbers" type="checkbox" class="switch"></div>
+        </div>
+
+        <div class="setting">
+          <div class="setting-text">
             <label for="overwrite">Replace files you already have</label>
             <p>If a video with the same name is already in the folder, download it again and replace it. When this is off, videos that are already there are left alone.</p>
           </div>

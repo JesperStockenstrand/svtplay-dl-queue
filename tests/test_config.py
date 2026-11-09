@@ -36,6 +36,10 @@ class BuildArgsTest(unittest.TestCase):
             ["--subfolder", "--force", "--resolution", "720", "--output-format", "mkv",
              "--thumbnail", "--nfo", "--chapters"])
 
+    def test_episode_numbers_sets_filename_template(self):
+        self.assertEqual(args(episode_numbers=True),
+                         ["--filename", "{title}.S{season}E{episode}.{episodename}.{ext}"])
+
     def test_series_options_only_for_all_episodes(self):
         self.assertEqual(args(all_last=5, include_clips=True), [])
         self.assertEqual(args(True, all_last=5, include_clips=True),
@@ -44,6 +48,50 @@ class BuildArgsTest(unittest.TestCase):
     def test_extra_args_come_last_and_respect_quotes(self):
         self.assertEqual(args(subtitles="separate", extra_args="--exclude 'a b,c'"),
                          ["--subtitle", "--exclude", "a b,c"])
+
+
+NAMING_SNIPPET = r"""
+import json, sys
+from svtplay_dl.utils.output import _formatname
+from svtplay_dl.utils.parser import Options
+c = Options()
+c.set("filename", sys.argv[1])
+print(json.dumps([_formatname(o, c) for o in json.loads(sys.argv[2])]))
+"""
+
+
+def _svtplay_dl_python():
+    binary = q.find_binary(dict(q.DEFAULT_CONFIG))
+    return q._interpreter_for(os.path.realpath(binary)) if binary else None
+
+
+@unittest.skipUnless(_svtplay_dl_python(), "svtplay-dl (Python install) not found")
+class RealNamingTest(unittest.TestCase):
+    """Run the S01E05 template through the installed svtplay-dl's own naming code."""
+
+    def test_names(self):
+        import json
+        import subprocess
+        videos = [
+            dict(title="Mästarnas mästare", season="16", episode="3", episodename="Finalen",
+                 id="1a2b3c4", service="svtplay", ext="mp4"),
+            dict(title="Rapport", episode="5", episodename="Del 5", id="9f8", service="svtplay",
+                 ext="mp4"),
+            dict(title="Jönssonligan", id="5c6", service="svtplay", ext="mp4"),
+            dict(title="Mästarnas mästare", season="16", episode="3", episodename="Finalen",
+                 id="1a2b3c4", service="svtplay", ext="srt"),
+        ]
+        out = subprocess.run(
+            _svtplay_dl_python() + ["-I", "-c", NAMING_SNIPPET, q.EPISODE_FILENAME,
+                                    json.dumps(videos)],
+            capture_output=True, check=True, timeout=30,
+        ).stdout
+        self.assertEqual(json.loads(out), [
+            "mastarnas.mastare.S16E03.finalen.mp4",
+            "rapport.E05.del.5.mp4",
+            "jonssonligan.mp4",
+            "mastarnas.mastare.S16E03.finalen.srt",
+        ])
 
 
 class ValidateTest(unittest.TestCase):

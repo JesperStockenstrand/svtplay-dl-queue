@@ -71,7 +71,7 @@ This copies the helper to `~/Library/Application Support/svtplay-dl-queue` (macO
 - The popup tells you whether svtplay-dl supports the site you're on. The list comes from your installed svtplay-dl, so it's always up to date. Sites without a module can still work when the page has a video player svtplay-dl recognizes, so you can add them anyway.
 - Or right-click a page or a link and choose one of the svtplay-dl items.
 - The badge on the toolbar button shows how many downloads are queued or running.
-- Open **⚙ Settings** in the popup to choose the download folder (default `~/Downloads/svtplay-dl`), video quality and file format, subtitles, extras such as cover images and info files for Kodi/Jellyfin/Plex, how many episodes "All episodes" gets, and how many downloads run at once. Each setting explains what it does, and the page shows the svtplay-dl command your choices produce. Other svtplay-dl options can be added under **Advanced**.
+- Open **⚙ Settings** in the popup to choose the download folder (default `~/Downloads/svtplay-dl`), media-server-friendly episode names (`show.name.S01E05.episode.name.mp4`), video quality and file format, subtitles, extras such as cover images and info files for Kodi/Jellyfin/Plex, how many episodes "All episodes" gets, and how many downloads run at once. Each setting explains what it does, and the page shows the svtplay-dl command your choices produce. Other svtplay-dl options can be added under **Advanced**.
 
 ### Command line
 
