@@ -39,11 +39,50 @@ ACTIVE = ("queued", "downloading")
 FINISHED = ("done", "failed", "canceled")
 
 DEFAULT_CONFIG = {
-    "binary": "",  # empty = auto-detect svtplay-dl
+    # Where to save
     "download_dir": "~/Downloads/svtplay-dl",
-    "extra_args": "",  # extra command line arguments, shell syntax
+    "subfolder": False,
+    "overwrite": False,
+    # Video
+    "resolution": "",  # "" = best available
+    "output_format": "mp4",
+    # Subtitles: none, separate, embedded or both
+    "subtitles": "none",
+    "all_subtitles": False,
+    # Extras
+    "thumbnail": False,
+    "nfo": False,
+    "chapters": False,
+    # Series ("All episodes")
+    "all_last": 0,  # 0 = every episode
+    "include_clips": False,
+    # Queue
     "max_parallel": 1,
     "notify": True,
+    # Advanced
+    "binary": "",  # empty = auto-detect svtplay-dl
+    "extra_args": "",  # extra command line arguments, shell syntax
+}
+
+# How each setting is validated: ("bool",), ("int", min, max),
+# ("choice", options...), ("str",), ("args",).
+CONFIG_SCHEMA = {
+    "download_dir": ("str",),
+    "subfolder": ("bool",),
+    "overwrite": ("bool",),
+    "resolution": ("choice", "", "1080", "720", "480"),
+    "output_format": ("choice", "mp4", "mkv"),
+    "subtitles": ("choice", "none", "separate", "embedded", "both"),
+    "all_subtitles": ("bool",),
+    "thumbnail": ("bool",),
+    "nfo": ("bool",),
+    "chapters": ("bool",),
+    "all_last": ("int", 0, 999),
+    "include_clips": ("bool",),
+    "max_parallel": ("int", 1, 8),
+    "notify": ("bool",),
+    "binary": ("str",),
+    "extra_args": ("args",),
 }
 
 
@@ -101,27 +140,76 @@ def load_config():
     return cfg
 
 
+def _validate(key, value):
+    if key not in CONFIG_SCHEMA:
+        raise ValueError("Unknown setting: %s" % key)
+    kind = CONFIG_SCHEMA[key]
+    if kind[0] == "bool":
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on")
+        return bool(value)
+    if kind[0] == "int":
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            raise ValueError("%s must be a whole number" % key)
+        if not kind[1] <= value <= kind[2]:
+            raise ValueError("%s must be between %d and %d" % (key, kind[1], kind[2]))
+        return value
+    value = "" if value is None else str(value).strip()
+    if kind[0] == "choice" and value not in kind[1:]:
+        raise ValueError("%s must be one of: %s" % (key, ", ".join(repr(c) for c in kind[1:])))
+    if kind[0] == "args":
+        try:
+            shlex.split(value)
+        except ValueError as e:
+            raise ValueError("Other options: %s" % e)
+    if key == "download_dir" and not value:
+        raise ValueError("The download folder can't be empty")
+    return value
+
+
 def save_config(changes):
     cfg = load_config()
     for key, value in changes.items():
-        if key not in DEFAULT_CONFIG:
-            raise ValueError("Unknown setting: %s" % key)
-        if key == "max_parallel":
-            value = int(value)
-            if not 1 <= value <= 8:
-                raise ValueError("Parallel downloads must be between 1 and 8")
-        elif key == "notify":
-            value = bool(value)
-        else:
-            value = str(value).strip()
-            if key == "extra_args":
-                shlex.split(value)  # raises ValueError on bad quoting
-            if key == "download_dir" and not value:
-                raise ValueError("Download folder can't be empty")
-        cfg[key] = value
+        cfg[key] = _validate(key, value)
     _ensure_dirs()
     _write_json(CONFIG_FILE, cfg)
     return cfg
+
+
+def build_args(cfg, all_episodes=False):
+    """Turn the settings into svtplay-dl command line options."""
+    args = []
+    if cfg.get("subfolder"):
+        args.append("--subfolder")
+    if cfg.get("overwrite"):
+        args.append("--force")
+    if cfg.get("resolution"):
+        args += ["--resolution", cfg["resolution"]]
+    if cfg.get("output_format") == "mkv":
+        args += ["--output-format", "mkv"]
+    subs = cfg.get("subtitles")
+    if subs in ("separate", "both"):
+        args.append("--subtitle")
+    if subs in ("embedded", "both"):
+        args.append("--merge-subtitle")
+    if subs != "none" and cfg.get("all_subtitles"):
+        args.append("--all-subtitles")
+    if cfg.get("thumbnail"):
+        args.append("--thumbnail")
+    if cfg.get("nfo"):
+        args.append("--nfo")
+    if cfg.get("chapters"):
+        args.append("--chapters")
+    if all_episodes:
+        args.append("--all-episodes")
+        if cfg.get("all_last"):
+            args += ["--all-last", str(cfg["all_last"])]
+        if cfg.get("include_clips"):
+            args.append("--include-clips")
+    args += shlex.split(cfg.get("extra_args") or "")
+    return args
 
 
 def search_path():
@@ -314,16 +402,24 @@ def cmd_clear():
     return {}
 
 
+def _config_reply(cfg):
+    return {
+        "config": cfg,
+        "detected_binary": find_binary(dict(cfg, binary="")),
+        "binary_ok": find_binary(cfg) is not None,
+        "command": build_args(cfg, False),
+        "command_all": build_args(cfg, True),
+    }
+
+
 def cmd_get_config():
-    cfg = load_config()
-    return {"config": cfg, "detected_binary": find_binary(dict(cfg, binary=""))}
+    return _config_reply(load_config())
 
 
 def cmd_set_config(changes):
     if not isinstance(changes, dict):
         raise ValueError("config must be an object")
-    cfg = save_config(changes)
-    return {"config": cfg, "detected_binary": find_binary(dict(cfg, binary=""))}
+    return _config_reply(save_config(changes))
 
 
 def cmd_open_folder():
@@ -445,10 +541,7 @@ class Download:
         self.outfile = None
         dest = os.path.expanduser(cfg["download_dir"])
         os.makedirs(dest, exist_ok=True)
-        cmd = [binary] + shlex.split(cfg.get("extra_args") or "")
-        if job["all_episodes"]:
-            cmd.append("--all-episodes")
-        cmd.append(job["url"])
+        cmd = [binary] + build_args(cfg, job["all_episodes"]) + [job["url"]]
         env = dict(os.environ, PATH=search_path(), PYTHONUNBUFFERED="1")
         self.log_path = os.path.join(LOG_DIR, job["id"] + ".log")
         self.proc = subprocess.Popen(
@@ -654,6 +747,7 @@ def run_cli(args):
             changes[key] = value
         cfg = save_config(changes) if changes else load_config()
         print(json.dumps(cfg, indent=2))
+        print("\nsvtplay-dl " + " ".join(shlex.quote(a) for a in build_args(cfg)) + " URL")
     else:
         print(USAGE, file=sys.stderr)
         return 2

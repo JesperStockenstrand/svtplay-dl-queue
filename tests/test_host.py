@@ -27,9 +27,11 @@ class HostTest(unittest.TestCase):
         os.chmod(FAKE, 0o755)
         reply = self.send({"action": "set_config", "config": {
             "binary": FAKE, "download_dir": self.downloads, "notify": False,
-            "extra_args": "-S --quality 720",
+            "subtitles": "embedded", "extra_args": "--audio-language swe",
         }})
         self.assertTrue(reply["ok"], reply)
+        self.assertTrue(reply["binary_ok"])
+        self.assertEqual(reply["command"], ["--merge-subtitle", "--audio-language", "swe"])
 
     def tearDown(self):
         # Stop the worker and anything it started before deleting its folder.
@@ -70,6 +72,14 @@ class HostTest(unittest.TestCase):
         self.assertFalse(bad["ok"])
         self.assertIn("Unknown action", bad["error"])
 
+    def test_invalid_settings_are_rejected(self):
+        for change in ({"resolution": "999"}, {"max_parallel": 0}, {"download_dir": " "},
+                       {"extra_args": "--x 'unclosed"}, {"no_such_setting": 1}):
+            reply = self.send({"action": "set_config", "config": change})
+            self.assertFalse(reply["ok"], change)
+        # Nothing was changed by the rejected attempts.
+        self.assertEqual(self.send({"action": "get_config"})["config"]["max_parallel"], 1)
+
     def test_rejects_non_http_urls(self):
         reply = self.send({"action": "add", "url": "file:///etc/passwd"})
         self.assertFalse(reply["ok"])
@@ -93,7 +103,8 @@ class HostTest(unittest.TestCase):
 
         with open(os.path.join(self.downloads, "fake-video.mp4")) as f:
             args = f.read()
-        self.assertEqual(args, "-S --quality 720 --all-episodes https://example.com/ok")
+        self.assertEqual(
+            args, "--merge-subtitle --all-episodes --audio-language swe https://example.com/ok")
 
         # Retry puts it back in the queue; clear removes finished jobs.
         self.send({"action": "retry", "id": failed["id"]})

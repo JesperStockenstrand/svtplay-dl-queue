@@ -2,41 +2,235 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>svtplay-dl Queue settings</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="options">
-  <h1>svtplay-dl Queue settings</h1>
+  <main>
+    <header class="page-header">
+      <h1>Settings</h1>
+      <p>Changes are saved automatically and apply to downloads that start after the change.</p>
+    </header>
 
-  <div id="error" class="error" hidden></div>
+    <div id="error" class="error" role="alert" hidden></div>
 
-  <form id="form">
-    <label for="download_dir">Download folder</label>
-    <input id="download_dir" type="text" spellcheck="false" required>
+    <form id="form" novalidate>
+      <!-- Where to save -->
+      <section class="card">
+        <h2>Where to save</h2>
 
-    <label for="binary">Path to svtplay-dl</label>
-    <input id="binary" type="text" spellcheck="false" placeholder="Detect automatically">
-    <p class="hint" id="detected"></p>
+        <div class="setting stacked">
+          <div class="setting-text">
+            <label for="download_dir">Download folder</label>
+            <p>Where finished videos are saved. <code>~</code> means your home folder. The folder is created if it doesn't exist.</p>
+          </div>
+          <div class="setting-control">
+            <input id="download_dir" type="text" spellcheck="false" autocomplete="off">
+          </div>
+        </div>
 
-    <label for="extra_args">Extra svtplay-dl options</label>
-    <input id="extra_args" type="text" spellcheck="false" placeholder="e.g. -S --merge-subtitle -q 1080">
-    <p class="hint">Added to every download. Run <code>svtplay-dl --help</code> to see the options.</p>
+        <div class="setting">
+          <div class="setting-text">
+            <label for="subfolder">Sort series into folders</label>
+            <p>Saves each series in its own folder named after the show. Films go in a folder called “movies”. Useful when you download many episodes.</p>
+          </div>
+          <div class="setting-control"><input id="subfolder" type="checkbox" class="switch"></div>
+        </div>
 
-    <label for="max_parallel">Downloads at the same time</label>
-    <select id="max_parallel">
-      <option value="1">1</option>
-      <option value="2">2</option>
-      <option value="3">3</option>
-      <option value="4">4</option>
-    </select>
+        <div class="setting">
+          <div class="setting-text">
+            <label for="overwrite">Replace files you already have</label>
+            <p>If a video with the same name is already in the folder, download it again and replace it. When this is off, videos that are already there are left alone.</p>
+          </div>
+          <div class="setting-control"><input id="overwrite" type="checkbox" class="switch"></div>
+        </div>
+      </section>
 
-    <label class="check"><input id="notify" type="checkbox"> Show a notification when a download finishes or fails</label>
+      <!-- Video -->
+      <section class="card">
+        <h2>Video</h2>
 
-    <div class="row">
-      <span id="saved" class="saved" hidden>Saved</span>
-      <button type="submit" class="primary">Save</button>
-    </div>
-  </form>
+        <div class="setting">
+          <div class="setting-text">
+            <label for="resolution">Quality</label>
+            <p>Lower quality gives smaller files. If a video isn't offered in the quality you pick, the download can fail. Then switch back to “Best available” and retry it.</p>
+          </div>
+          <div class="setting-control">
+            <select id="resolution">
+              <option value="">Best available</option>
+              <option value="1080">1080p (Full HD)</option>
+              <option value="720">720p (HD)</option>
+              <option value="480">480p (small files)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting">
+          <div class="setting-text">
+            <label for="output_format">File format</label>
+            <p><strong>MP4</strong> plays almost everywhere: phones, TVs, QuickTime. <strong>MKV</strong> handles several subtitle languages better and works well in VLC, Plex, Jellyfin and Kodi.</p>
+          </div>
+          <div class="setting-control">
+            <select id="output_format">
+              <option value="mp4">MP4</option>
+              <option value="mkv">MKV</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Subtitles -->
+      <section class="card">
+        <h2>Subtitles</h2>
+        <fieldset class="choices">
+          <legend class="visually-hidden">Subtitles</legend>
+          <label class="choice">
+            <input type="radio" name="subtitles" value="none">
+            <span><strong>No subtitles</strong><small>Only the video is downloaded.</small></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="subtitles" value="embedded">
+            <span><strong>Built into the video</strong><small>The subtitles are stored inside the video file, and you turn them on or off in your video player. Keeps everything in one file.</small></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="subtitles" value="separate">
+            <span><strong>As a separate file</strong><small>Saved as an .srt text file next to the video. Most players find it automatically because the names match.</small></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="subtitles" value="both">
+            <span><strong>Both</strong><small>Built into the video and as a separate file.</small></span>
+          </label>
+        </fieldset>
+
+        <div class="setting" id="all_subtitles_row">
+          <div class="setting-text">
+            <label for="all_subtitles">All languages</label>
+            <p>Get every subtitle language the service offers, not just the default one. Some services also offer a version for the hard of hearing.</p>
+          </div>
+          <div class="setting-control"><input id="all_subtitles" type="checkbox" class="switch"></div>
+        </div>
+      </section>
+
+      <!-- Extras -->
+      <section class="card">
+        <h2>Extras</h2>
+
+        <div class="setting">
+          <div class="setting-text">
+            <label for="thumbnail">Cover image</label>
+            <p>Save the program's cover image next to the video.</p>
+          </div>
+          <div class="setting-control"><input id="thumbnail" type="checkbox" class="switch"></div>
+        </div>
+
+        <div class="setting">
+          <div class="setting-text">
+            <label for="nfo">Info file for media libraries</label>
+            <p>Saves an .nfo file with the title, description and episode number. Kodi, Jellyfin and Plex use it to show your downloads with proper names and descriptions.</p>
+          </div>
+          <div class="setting-control"><input id="nfo" type="checkbox" class="switch"></div>
+        </div>
+
+        <div class="setting">
+          <div class="setting-text">
+            <label for="chapters">Chapters</label>
+            <p>Adds chapter markers when the service has them, so you can jump between parts of the program in your player.</p>
+          </div>
+          <div class="setting-control"><input id="chapters" type="checkbox" class="switch"></div>
+        </div>
+      </section>
+
+      <!-- Series -->
+      <section class="card">
+        <h2>Whole series</h2>
+        <p class="card-intro">These apply when you choose “All episodes” in the popup or the right-click menu.</p>
+
+        <div class="setting">
+          <div class="setting-text">
+            <label for="all_last">How many episodes</label>
+            <p>Download only the latest episodes, for example the 5 most recent. Leave it at 0 to get every episode.</p>
+          </div>
+          <div class="setting-control">
+            <input id="all_last" type="number" min="0" max="999" step="1" inputmode="numeric" class="narrow">
+          </div>
+        </div>
+
+        <div class="setting">
+          <div class="setting-text">
+            <label for="include_clips">Include clips</label>
+            <p>Also download short clips and extra material, not just full episodes.</p>
+          </div>
+          <div class="setting-control"><input id="include_clips" type="checkbox" class="switch"></div>
+        </div>
+      </section>
+
+      <!-- Queue -->
+      <section class="card">
+        <h2>Queue</h2>
+
+        <div class="setting">
+          <div class="setting-text">
+            <label for="max_parallel">Downloads at the same time</label>
+            <p>One at a time is the most reliable and leaves bandwidth for everything else. On a fast connection, two or three at once can finish a long queue sooner.</p>
+          </div>
+          <div class="setting-control">
+            <select id="max_parallel">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting">
+          <div class="setting-text">
+            <label for="notify">Notifications</label>
+            <p>Show a system notification when a download finishes or fails, even when the browser is closed.</p>
+          </div>
+          <div class="setting-control"><input id="notify" type="checkbox" class="switch"></div>
+        </div>
+      </section>
+
+      <!-- Advanced -->
+      <details class="card advanced">
+        <summary><h2>Advanced</h2></summary>
+
+        <div class="setting stacked">
+          <div class="setting-text">
+            <label for="binary">Where svtplay-dl is installed</label>
+            <p id="binary_help">Leave empty to find it automatically.</p>
+          </div>
+          <div class="setting-control">
+            <input id="binary" type="text" spellcheck="false" autocomplete="off" placeholder="Find automatically">
+          </div>
+        </div>
+
+        <div class="setting stacked">
+          <div class="setting-text">
+            <label for="extra_args">Other svtplay-dl options</label>
+            <p>For options that aren't on this page. They're added to every download, written as on the command line, e.g. <code>--audio-language swe</code>. Run <code>svtplay-dl --help</code> in Terminal to see them all.</p>
+          </div>
+          <div class="setting-control">
+            <input id="extra_args" type="text" spellcheck="false" autocomplete="off" placeholder="None">
+          </div>
+        </div>
+      </details>
+
+      <!-- Preview -->
+      <section class="card preview">
+        <h2>What will run</h2>
+        <p class="card-intro">For the curious: this is the command your settings produce.</p>
+        <div class="command-label">One video</div>
+        <pre id="command"></pre>
+        <div class="command-label">All episodes</div>
+        <pre id="command_all"></pre>
+      </section>
+    </form>
+  </main>
+
+  <div id="saved" class="toast" role="status" aria-live="polite"></div>
 
   <script src="common.js"></script>
   <script src="options.js"></script>
