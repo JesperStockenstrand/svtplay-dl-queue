@@ -57,8 +57,13 @@ case "$(uname -s)" in
     )
     FIREFOX_DIRS=("$HOME/.mozilla")
     ;;
+  MINGW*|MSYS*|CYGWIN*)
+    echo "On Windows, run install.ps1 instead:" >&2
+    echo "  powershell -ExecutionPolicy Bypass -File install.ps1" >&2
+    exit 1
+    ;;
   *)
-    echo "Sorry, only macOS and Linux are supported for now." >&2
+    echo "Sorry, this system isn't supported." >&2
     exit 1
     ;;
 esac

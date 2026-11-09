@@ -10,11 +10,10 @@ One file, three roles:
   and exits by itself when the queue has been idle for a while.
 * **CLI** (``add``, ``list``, ...): manage the same queue from a terminal.
 
-Only the Python standard library is used. Works on macOS and Linux.
+Only the Python standard library is used. Works on macOS, Linux and Windows.
 """
 
 import contextlib
-import fcntl
 import glob
 import json
 import os
@@ -29,6 +28,12 @@ import threading
 import time
 import uuid
 from urllib.parse import urlparse
+
+WINDOWS = os.name == "nt"
+if WINDOWS:
+    import msvcrt
+else:
+    import fcntl
 
 APP = "svtplay-dl-queue"
 VERSION = "0.1.0"
@@ -101,6 +106,9 @@ def data_dir():
     override = os.environ.get("SVTDL_QUEUE_HOME")
     if override:
         return override
+    if WINDOWS:
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+        return os.path.join(base, APP)
     if sys.platform == "darwin":
         return os.path.expanduser("~/Library/Application Support/" + APP)
     base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
@@ -112,6 +120,7 @@ STATE_FILE = os.path.join(DATA, "queue.json")
 CONFIG_FILE = os.path.join(DATA, "config.json")
 QUEUE_LOCK = os.path.join(DATA, "queue.lock")
 WORKER_LOCK = os.path.join(DATA, "worker.lock")
+WORKER_PID = os.path.join(DATA, "worker.pid")
 LOG_DIR = os.path.join(DATA, "logs")
 WORKER_LOG = os.path.join(DATA, "worker.log")
 SITES_CACHE = os.path.join(DATA, "sites.json")
@@ -121,10 +130,24 @@ def _ensure_dirs():
     os.makedirs(LOG_DIR, exist_ok=True)
 
 
+def _retry(fn, attempts=20):
+    """Windows refuses to replace or open a file another process is using
+    at that instant. Those clashes are brief, so try again a few times."""
+    for i in range(attempts):
+        try:
+            return fn()
+        except PermissionError:
+            if i == attempts - 1:
+                raise
+            time.sleep(0.05)
+
+
 def _read_json(path, default):
-    try:
+    def read():
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
+    try:
+        return _retry(read)
     except (FileNotFoundError, ValueError):
         return default
 
@@ -133,7 +156,120 @@ def _write_json(path, data):
     tmp = "%s.%d.tmp" % (path, os.getpid())
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    os.replace(tmp, path)
+    _retry(lambda: os.replace(tmp, path))
+
+
+# --------------------------------------------------------------------------
+# Platform helpers: locks and processes
+# --------------------------------------------------------------------------
+
+if WINDOWS:
+    NO_WINDOW = subprocess.CREATE_NO_WINDOW
+    # A process started by the browser is in a Windows "job" that the browser
+    # ends when it's done with the helper. The worker must break away from it.
+    DETACHED = (subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                | subprocess.CREATE_BREAKAWAY_FROM_JOB)
+else:
+    NO_WINDOW = 0
+    DETACHED = 0
+
+
+def _try_lock(f):
+    """Take an exclusive lock on an open file without waiting. True if taken."""
+    try:
+        if WINDOWS:
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:  # includes BlockingIOError
+        return False
+
+
+def _unlock(f):
+    try:
+        if WINDOWS:
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl.flock(f, fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+@contextlib.contextmanager
+def _locked(path):
+    """Hold an exclusive lock on `path` for the duration of the block."""
+    with open(path, "a+") as f:
+        if WINDOWS:
+            while not _try_lock(f):
+                time.sleep(0.02)
+        else:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield f
+        finally:
+            _unlock(f)
+
+
+def _popen_detached(cmd, **kwargs):
+    """Start a process that keeps running after this one exits."""
+    if not WINDOWS:
+        return subprocess.Popen(cmd, start_new_session=True, **kwargs)
+    try:
+        return subprocess.Popen(cmd, creationflags=DETACHED, **kwargs)
+    except OSError:
+        # The job doesn't allow breaking away; start it inside the job instead.
+        flags = DETACHED & ~subprocess.CREATE_BREAKAWAY_FROM_JOB
+        return subprocess.Popen(cmd, creationflags=flags, **kwargs)
+
+
+def _popen_group(cmd, **kwargs):
+    """Start a process in its own group (so it can be stopped with its
+    children), without a console window on Windows."""
+    if WINDOWS:
+        return subprocess.Popen(
+            cmd, creationflags=NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP, **kwargs)
+    return subprocess.Popen(cmd, start_new_session=True, **kwargs)
+
+
+def _pid_alive(pid):
+    if not pid:
+        return False
+    if WINDOWS:
+        # os.kill(pid, 0) would *terminate* the process on Windows.
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, int(pid))  # QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        kernel32.CloseHandle(handle)
+        return bool(ok) and code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def _kill_group(pid):
+    """Stop a download: svtplay-dl and anything it started (ffmpeg)."""
+    if not pid:
+        return
+    if WINDOWS:
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, creationflags=NO_WINDOW)
+        return
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -226,15 +362,29 @@ def search_path():
     """PATH used to find svtplay-dl and ffmpeg.
 
     Browsers start native hosts with a minimal PATH, so add the usual
-    install locations (Homebrew, pipx, pip --user).
+    install locations (Homebrew, pipx, pip --user, winget, Scoop).
     """
-    extra = [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        os.path.expanduser("~/.local/bin"),
-    ]
-    extra += sorted(glob.glob(os.path.expanduser("~/Library/Python/*/bin")), reverse=True)
-    parts = os.environ.get("PATH", "/usr/bin:/bin").split(os.pathsep)
+    if WINDOWS:
+        local = os.environ.get("LOCALAPPDATA", "")
+        roaming = os.environ.get("APPDATA", "")
+        extra = [
+            os.path.expanduser("~\\.local\\bin"),  # pipx
+            os.path.join(local, "Microsoft", "WinGet", "Links"),  # winget (e.g. ffmpeg)
+            os.path.expanduser("~\\scoop\\shims"),
+        ]
+        extra += sorted(glob.glob(os.path.join(roaming, "Python", "Python3*", "Scripts")),
+                        reverse=True)  # pip install --user
+        extra += sorted(glob.glob(os.path.join(local, "Programs", "Python", "Python3*",
+                                               "Scripts")), reverse=True)
+    else:
+        extra = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            os.path.expanduser("~/.local/bin"),
+        ]
+        extra += sorted(glob.glob(os.path.expanduser("~/Library/Python/*/bin")), reverse=True)
+    default = "" if WINDOWS else "/usr/bin:/bin"
+    parts = [p for p in os.environ.get("PATH", default).split(os.pathsep) if p]
     for p in extra:
         if p not in parts:
             parts.append(p)
@@ -265,13 +415,29 @@ print(json.dumps([[s.__name__, list(s.supported_domains), list(s.supported_domai
 STREAM_EXTENSIONS = (".m3u8", ".mpd", ".f4m")
 
 
+LAUNCHER_SHEBANG_RE = re.compile(rb'#!\s*("[^"\r\n]+"|[^\s"]+)[^\r\n]*\r?\nPK\x03\x04')
+
+
 def _interpreter_for(path):
-    """The interpreter from a script's #! line, as an argv list (or None)."""
+    """The Python that runs svtplay-dl, as an argv list (or None).
+
+    On macOS/Linux svtplay-dl is a script whose #! line names it. On Windows,
+    pip and pipx create svtplay-dl.exe launchers that carry the same line just
+    before a zip archive with the script. A standalone svtplay-dl.exe has
+    neither, and gives None.
+    """
     try:
         with open(path, "rb") as f:
-            first = f.readline(512).decode("utf-8", "replace").strip()
+            head = f.read(4 * 1024 * 1024)
     except OSError:
         return None
+    if head.startswith(b"MZ"):  # Windows executable
+        matches = LAUNCHER_SHEBANG_RE.findall(head)
+        if not matches:
+            return None
+        python = matches[-1].decode("utf-8", "replace").strip('"')
+        return [python] if os.path.isfile(python) else None
+    first = head.split(b"\n", 1)[0].decode("utf-8", "replace").strip()
     if not first.startswith("#!"):
         return None  # not a script, e.g. a standalone executable
     parts = first[2:].split()
@@ -307,6 +473,7 @@ def load_sites(cfg):
             out = subprocess.run(
                 interpreter + ["-I", "-c", SITES_SNIPPET], stdin=subprocess.DEVNULL,
                 capture_output=True, timeout=20, env=dict(os.environ, PATH=search_path()),
+                creationflags=NO_WINDOW,
             )
             if out.returncode == 0:
                 sites = json.loads(out.stdout.decode("utf-8"))
@@ -354,15 +521,14 @@ def cmd_check_url(url):
 
 
 # --------------------------------------------------------------------------
-# Queue state (a JSON file guarded by an flock)
+# Queue state (a JSON file guarded by a lock file)
 # --------------------------------------------------------------------------
 
 @contextlib.contextmanager
 def queue():
     """Lock the queue, yield its state, and save it if no exception occurred."""
     _ensure_dirs()
-    with open(QUEUE_LOCK, "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with _locked(QUEUE_LOCK):
         state = _read_json(STATE_FILE, {"jobs": []})
         if not isinstance(state.get("jobs"), list):
             state = {"jobs": []}
@@ -379,27 +545,6 @@ def _find(state, job_id):
 
 def _valid_url(url):
     return isinstance(url, str) and re.match(r"^https?://[^\s]+$", url.strip()) is not None
-
-
-def _pid_alive(pid):
-    if not pid:
-        return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-
-
-def _kill_group(pid):
-    if not pid:
-        return
-    try:
-        os.killpg(pid, signal.SIGTERM)
-    except (ProcessLookupError, PermissionError):
-        pass
 
 
 def _prune(state):
@@ -538,6 +683,9 @@ def cmd_set_config(changes):
 def cmd_open_folder():
     folder = os.path.expanduser(load_config()["download_dir"])
     os.makedirs(folder, exist_ok=True)
+    if WINDOWS:
+        os.startfile(folder)
+        return {}
     opener = "open" if sys.platform == "darwin" else "xdg-open"
     subprocess.Popen([opener, folder], stdin=subprocess.DEVNULL,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -621,25 +769,21 @@ def run_native_host():
 
 def worker_running():
     _ensure_dirs()
-    with open(WORKER_LOCK, "a") as f:
-        try:
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+    with open(WORKER_LOCK, "a+") as f:
+        if not _try_lock(f):
             return True
-        fcntl.flock(f, fcntl.LOCK_UN)
+        _unlock(f)
         return False
 
 
 def ensure_worker():
     if worker_running():
         return
-    log = open(WORKER_LOG, "a")
-    subprocess.Popen(
-        [sys.executable, os.path.abspath(__file__), "--worker"],
-        stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-        start_new_session=True, close_fds=True,
-    )
-    log.close()
+    with open(WORKER_LOG, "a") as log:
+        _popen_detached(
+            [sys.executable, os.path.abspath(__file__), "--worker"],
+            stdin=subprocess.DEVNULL, stdout=log, stderr=log, close_fds=True,
+        )
 
 
 PROGRESS_RE = re.compile(r"\[(\d+)/(\d+)\]")
@@ -657,12 +801,14 @@ class Download:
         dest = os.path.expanduser(cfg["download_dir"])
         os.makedirs(dest, exist_ok=True)
         cmd = [binary] + build_args(cfg, job["all_episodes"]) + [job["url"]]
-        env = dict(os.environ, PATH=search_path(), PYTHONUNBUFFERED="1")
+        # svtplay-dl is a Python program: make its output unbuffered and UTF-8
+        # (Windows would otherwise use the console's legacy code page).
+        env = dict(os.environ, PATH=search_path(), PYTHONUNBUFFERED="1",
+                   PYTHONIOENCODING="utf-8")
         self.log_path = os.path.join(LOG_DIR, job["id"] + ".log")
-        self.proc = subprocess.Popen(
+        self.proc = _popen_group(
             cmd, cwd=dest, env=env, stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            start_new_session=True,
         )
         self.thread = threading.Thread(target=self._follow, daemon=True)
         self.thread.start()
@@ -703,9 +849,30 @@ class Download:
         self.last_line = line[:300]
 
 
+# Windows toast notification via PowerShell. Text comes in environment
+# variables so it never has to be quoted into the script.
+WINDOWS_TOAST = r"""
+$null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+$texts = $xml.GetElementsByTagName('text')
+$null = $texts.Item(0).AppendChild($xml.CreateTextNode($env:SVTDL_TITLE))
+$null = $texts.Item(1).AppendChild($xml.CreateTextNode($env:SVTDL_MESSAGE))
+$app = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($app).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
+"""
+
+
 def notify(title, message):
     try:
-        if sys.platform == "darwin":
+        if WINDOWS:
+            subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                 "-Command", WINDOWS_TOAST],
+                env=dict(os.environ, SVTDL_TITLE=title, SVTDL_MESSAGE=message),
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, timeout=20, creationflags=NO_WINDOW,
+            )
+        elif sys.platform == "darwin":
             subprocess.run(
                 ["osascript", "-e", "on run argv", "-e",
                  "display notification (item 1 of argv) with title (item 2 of argv)",
@@ -722,11 +889,26 @@ def notify(title, message):
 
 def run_worker():
     _ensure_dirs()
-    lock = open(WORKER_LOCK, "a")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    lock = open(WORKER_LOCK, "a+")
+    if not _try_lock(lock):
         return  # another worker is already running
+    with open(WORKER_PID, "w") as f:
+        f.write(str(os.getpid()))
+    if not WINDOWS:
+        # Clean up (pid file, lock) when stopped with kill / pkill.
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    try:
+        _worker_loop()
+    finally:
+        try:
+            os.remove(WORKER_PID)
+        except OSError:
+            pass
+        _unlock(lock)
+        lock.close()
+
+
+def _worker_loop():
 
     # Recover from a crash: anything marked "downloading" isn't ours.
     with queue() as state:

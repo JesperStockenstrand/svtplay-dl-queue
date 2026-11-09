@@ -9,7 +9,7 @@ A browser extension that sends the page you're on to [svtplay-dl](https://github
 - **Settings:** download folder, extra svtplay-dl options (e.g. subtitles or quality), and how many downloads run at once.
 - **Command line:** add to and inspect the same queue from a terminal.
 
-Works with Chrome, Brave, Edge, Chromium, Vivaldi, Arc and Firefox on macOS and Linux.
+Works with Chrome, Brave, Edge, Chromium, Vivaldi, Arc and Firefox on macOS, Windows and Linux.
 
 > This project is not affiliated with svtplay-dl or with any streaming service. Only download content you have the right to download, and follow the terms of the services you use.
 
@@ -32,27 +32,35 @@ The helper is a single Python script with no dependencies beyond the standard li
 
 ## Installation
 
-### 1. Install svtplay-dl
+### 1. Install svtplay-dl and ffmpeg
 
-If you don't have it already:
+If you don't have them already:
 
-```bash
-brew install svtplay-dl
-```
-
-or `pipx install svtplay-dl`. svtplay-dl also needs [ffmpeg](https://ffmpeg.org/) (`brew install ffmpeg`).
+| | |
+| --- | --- |
+| macOS | `brew install svtplay-dl ffmpeg` |
+| Windows | `pipx install svtplay-dl` and `winget install Gyan.FFmpeg` (needs [Python](https://www.python.org/downloads/) and [pipx](https://pipx.pypa.io/)) |
+| Linux | `pipx install svtplay-dl` and ffmpeg from your package manager |
 
 ### 2. Install the helper
 
-You need Python 3.8 or later (`python3`), which macOS and most Linux distributions include.
+You need Python 3.8 or later. macOS and most Linux distributions include it. On Windows, install it from [python.org](https://www.python.org/downloads/) or with `winget install Python.Python.3.13`.
+
+Download the project (`git clone https://github.com/<your-account>/svtplay-dl-queue.git`, or **Code → Download ZIP** on GitHub) and run the installer from its folder.
+
+**macOS and Linux:**
 
 ```bash
-git clone https://github.com/<your-account>/svtplay-dl-queue.git
-cd svtplay-dl-queue
 ./install.sh
 ```
 
-This copies the helper to `~/Library/Application Support/svtplay-dl-queue` (macOS) or `~/.local/share/svtplay-dl-queue` (Linux) and registers it with every supported browser it finds.
+**Windows** (in PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+The installer copies the helper to its data folder (see [Troubleshooting](#troubleshooting)) and registers it with your browsers. On Windows that's done in the registry for the current user, so no administrator rights are needed.
 
 ### 3. Load the extension
 
@@ -61,7 +69,7 @@ This copies the helper to `~/Library/Application Support/svtplay-dl-queue` (macO
 1. Open `chrome://extensions` (`brave://extensions`, `edge://extensions`, …).
 2. Turn on **Developer mode**.
 3. Click **Load unpacked** and select the `extension` folder.
-4. Restart the browser if it was already running when you ran `install.sh`.
+4. Restart the browser if it was already running when you ran the installer.
 
 **Firefox:** open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and choose `extension/manifest.json`. Firefox removes temporary add-ons when it restarts. For permanent use, the add-on must be signed by Mozilla.
 
@@ -81,17 +89,19 @@ The helper doubles as a CLI for the same queue:
 ~/Library/Application\ Support/svtplay-dl-queue/bin/svtdl-queue add https://www.svtplay.se/video/...
 ```
 
-Other commands: `check URL` (is the site supported?), `list`, `cancel ID`, `retry ID`, `remove ID`, `clear`, `config [key=value ...]` (e.g. `config subtitles=embedded resolution=720`). On Linux the path is `~/.local/share/svtplay-dl-queue/bin/svtdl-queue`. Add an alias if you use it often.
+Other commands: `check URL` (is the site supported?), `list`, `cancel ID`, `retry ID`, `remove ID`, `clear`, `config [key=value ...]` (e.g. `config subtitles=embedded resolution=720`). On Linux the path is `~/.local/share/svtplay-dl-queue/bin/svtdl-queue`, and on Windows `%LOCALAPPDATA%\svtplay-dl-queue\bin\svtdl-queue.bat`. Add an alias if you use it often.
 
 ## Troubleshooting
 
 | Problem | What to do |
 | --- | --- |
-| "The helper app isn't installed" | Run `./install.sh` and restart the browser. If you installed the extension from a store rather than unpacked, pass its ID: `./install.sh --extension-id <id>`. |
-| "svtplay-dl wasn't found" | Install it, or set its full path in Settings (`which svtplay-dl` shows it). |
+| "The helper app isn't installed" | Run the installer and restart the browser. If you installed the extension from a store rather than unpacked, pass its ID: `./install.sh --extension-id <id>` or `install.ps1 -ExtensionId <id>`. |
+| "svtplay-dl wasn't found" | Install it, or set its full path in Settings (`which svtplay-dl` on macOS/Linux, `where.exe svtplay-dl` on Windows shows it). |
+| Linux: nothing happens | Browsers installed as Snap or Flatpak (e.g. Ubuntu's default Firefox) usually can't start helper apps. Use the browser's regular package instead. |
+| Windows: the site hint is missing | The hint needs svtplay-dl installed with pip or pipx. The standalone `svtplay-dl.exe` works for downloads, but its site list can't be read. |
 | A download failed | The last line of svtplay-dl's output is shown under the job. The full output is in `logs/<job id>.log` in the data folder. |
 
-Data folder: `~/Library/Application Support/svtplay-dl-queue` (macOS) or `~/.local/share/svtplay-dl-queue` (Linux). It contains `queue.json`, `config.json`, logs and the helper itself.
+Data folder: `~/Library/Application Support/svtplay-dl-queue` (macOS), `%LOCALAPPDATA%\svtplay-dl-queue` (Windows) or `~/.local/share/svtplay-dl-queue` (Linux). It contains `queue.json`, `config.json`, logs and the helper itself.
 
 ## Uninstall
 
@@ -99,7 +109,9 @@ Data folder: `~/Library/Application Support/svtplay-dl-queue` (macOS) or `~/.loc
 ./uninstall.sh
 ```
 
-This removes the helper, its browser registrations, the queue and the settings (use `--keep-data` to keep the queue and settings). Your downloaded files are not touched. Remove the extension from the browser's extensions page.
+On Windows: `powershell -ExecutionPolicy Bypass -File uninstall.ps1`.
+
+This removes the helper, its browser registrations, the queue and the settings (use `--keep-data`, or `-KeepData` on Windows, to keep the queue and settings). Your downloaded files are not touched. Remove the extension from the browser's extensions page.
 
 ## Development
 
@@ -108,7 +120,8 @@ extension/        the browser extension (Manifest V3, no build step)
 host/             svtdl_queue.py: native host, worker and CLI
 tests/            end-to-end tests with a fake svtplay-dl
 tools/            make_icons.py regenerates the icons
-install.sh        registers the helper with installed browsers
+install.sh        registers the helper with browsers (macOS, Linux)
+install.ps1       the same for Windows
 ```
 
 Run the tests:
@@ -116,6 +129,8 @@ Run the tests:
 ```bash
 python3 -m unittest discover tests -v
 ```
+
+`tests/check_install.py` checks an installed helper the way a browser uses it. GitHub Actions runs the tests, the installers and this check on macOS, Windows and Linux.
 
 After changing `host/svtdl_queue.py`, run `./install.sh` again to copy it into place. After changing the extension, click the reload button on the browser's extensions page.
 

@@ -57,6 +57,20 @@ class CheckUrlTest(unittest.TestCase):
             with open(binary, "wb") as f:
                 f.write(b"\x7fELF...")
             self.assertIsNone(q._interpreter_for(binary))
+
+            # A pip/pipx launcher .exe: the #! line sits just before a zip.
+            python = os.path.join(d, "My Python", "python.exe")
+            os.makedirs(os.path.dirname(python))
+            open(python, "w").close()
+            launcher = os.path.join(d, "svtplay-dl.exe")
+            with open(launcher, "wb") as f:
+                f.write(b"MZ" + b"\0" * 300 + b'#!"' + python.encode() + b'"\r\nPK\x03\x04zipdata')
+            self.assertEqual(q._interpreter_for(launcher), [python])
+
+            # A standalone .exe without a launcher line.
+            with open(launcher, "wb") as f:
+                f.write(b"MZ" + b"\0" * 300 + b"PK\x03\x04")
+            self.assertIsNone(q._interpreter_for(launcher))
         finally:
             shutil.rmtree(d)
 

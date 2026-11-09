@@ -7,6 +7,7 @@ Run with:  python3 -m unittest discover tests
 import json
 import os
 import shutil
+import signal
 import struct
 import subprocess
 import sys
@@ -17,6 +18,21 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOST = os.path.join(ROOT, "host", "svtdl_queue.py")
 FAKE = os.path.join(ROOT, "tests", "fake_downloader.py")
+WINDOWS = os.name == "nt"
+
+sys.path.insert(0, os.path.dirname(HOST))
+from svtdl_queue import _kill_group, _pid_alive  # noqa: E402
+
+
+def fake_binary(folder):
+    """The fake svtplay-dl as something the helper can run directly."""
+    if not WINDOWS:
+        os.chmod(FAKE, 0o755)
+        return FAKE
+    path = os.path.join(folder, "fake-svtplay-dl.cmd")
+    with open(path, "w") as f:
+        f.write('@"%s" "%s" %%*\n' % (sys.executable, FAKE))
+    return path
 
 
 class HostTest(unittest.TestCase):
@@ -24,9 +40,8 @@ class HostTest(unittest.TestCase):
         self.home = tempfile.mkdtemp(prefix="svtdl-test-")
         self.downloads = os.path.join(self.home, "downloads")
         self.env = dict(os.environ, SVTDL_QUEUE_HOME=self.home)
-        os.chmod(FAKE, 0o755)
         reply = self.send({"action": "set_config", "config": {
-            "binary": FAKE, "download_dir": self.downloads, "notify": False,
+            "binary": fake_binary(self.home), "download_dir": self.downloads, "notify": False,
             "subtitles": "embedded", "extra_args": "--audio-language swe",
         }})
         self.assertTrue(reply["ok"], reply)
@@ -34,10 +49,26 @@ class HostTest(unittest.TestCase):
         self.assertEqual(reply["command"], ["--merge-subtitle", "--audio-language", "swe"])
 
     def tearDown(self):
-        # Stop the worker and anything it started before deleting its folder.
-        subprocess.run(["pkill", "-f", FAKE], check=False)
-        subprocess.run(["pkill", "-f", HOST + " --worker"], check=False)
-        time.sleep(0.2)
+        # Stop downloads and the worker before deleting its folder.
+        try:
+            for job in self.send({"action": "list"})["jobs"]:
+                if job["status"] in ("queued", "downloading"):
+                    self.send({"action": "cancel", "id": job["id"]})
+        except Exception:
+            pass
+        try:
+            with open(os.path.join(self.home, "worker.pid")) as f:
+                pid = int(f.read())
+        except (OSError, ValueError):
+            pid = None
+        if pid:
+            if WINDOWS:
+                _kill_group(pid)
+            else:
+                os.kill(pid, signal.SIGTERM)
+            deadline = time.time() + 5
+            while _pid_alive(pid) and time.time() < deadline:
+                time.sleep(0.05)
         shutil.rmtree(self.home, ignore_errors=True)
 
     def send(self, *messages):
