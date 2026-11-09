@@ -1,0 +1,149 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1a202c;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --surface: #f7fafc;
+  --accent: #2b6cb0;
+  --accent-fg: #ffffff;
+  --danger: #c53030;
+  --danger-bg: #fff5f5;
+  --warn-bg: #fffbeb;
+  --warn-fg: #92400e;
+  --ok: #2f855a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1d23;
+    --fg: #e2e8f0;
+    --muted: #94a3b8;
+    --border: #2d333d;
+    --surface: #22262e;
+    --accent: #4f8fd6;
+    --danger: #fc8181;
+    --danger-bg: #3b1f22;
+    --warn-bg: #3a2f17;
+    --warn-fg: #fbd38d;
+    --ok: #68d391;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+button.icon { padding: 2px 6px; min-width: 24px; background: transparent; border-color: transparent; }
+button.icon:hover { border-color: var(--border); background: var(--surface); }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.error, .warning {
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.error { background: var(--danger-bg); color: var(--danger); }
+.warning { background: var(--warn-bg); color: var(--warn-fg); }
+
+/* Popup */
+
+body.popup { width: 380px; }
+
+.popup header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.popup h1 { font-size: 14px; margin: 0; }
+
+.add { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.url {
+  color: var(--muted);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jobs { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; }
+.job { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.job-top { display: flex; align-items: center; gap: 6px; }
+.job-title {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.job-title:hover { text-decoration: underline; }
+.job-actions { display: flex; flex-shrink: 0; }
+.job-status { color: var(--muted); font-size: 12px; }
+.job.done .job-status { color: var(--ok); }
+.job.failed .job-status { color: var(--danger); }
+.job-message {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); transition: width 0.4s; }
+.bar.indeterminate > div { animation: slide 1.2s infinite ease-in-out; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+
+.empty { color: var(--muted); text-align: center; margin: 20px 0; }
+
+.popup footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+/* Options */
+
+body.options { padding: 16px; max-width: 520px; }
+.options h1 { font-size: 16px; margin: 0 0 12px; }
+.options form { display: flex; flex-direction: column; }
+.options label { font-weight: 500; margin-top: 12px; margin-bottom: 4px; }
+.options label.check { font-weight: normal; display: flex; gap: 6px; align-items: center; }
+.options input[type="text"], .options select {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.options .hint { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+.options .row { margin-top: 16px; justify-content: flex-end; }
+.options .error { margin: 0 0 8px; }
+.saved { color: var(--ok); }
+code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }

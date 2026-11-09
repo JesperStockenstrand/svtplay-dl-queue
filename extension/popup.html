@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>svtplay-dl Queue</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="popup">
+  <header>
+    <h1>svtplay-dl Queue</h1>
+    <button id="settings" class="icon" title="Settings" aria-label="Settings">⚙</button>
+  </header>
+
+  <section class="add">
+    <div id="current-url" class="url" title=""></div>
+    <div class="row">
+      <label><input type="checkbox" id="all-episodes"> All episodes</label>
+      <button id="add" class="primary">Add to queue</button>
+    </div>
+  </section>
+
+  <div id="error" class="error" hidden></div>
+  <div id="warning" class="warning" hidden></div>
+
+  <ul id="jobs" class="jobs"></ul>
+  <p id="empty" class="empty" hidden>The queue is empty.</p>
+
+  <footer>
+    <button id="open-folder">Open download folder</button>
+    <button id="clear">Clear finished</button>
+  </footer>
+
+  <script src="common.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

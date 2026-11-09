@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "svtplay-dl Queue",
+  "version": "0.1.0",
+  "description": "Send video pages to svtplay-dl with one click and manage a download queue that keeps running after the browser closes.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA+FG9F/ehK/WhW9BlYgTPy4wd2ykwgfuJ5o4dFNWnd4Bd811y1EKnkhbZwa4TKnb18gSx+rq1Xz5HGG3FmGF3Cp95ZvvadWPi8OPhW3rU3HhpczIB8fABPi+wjFN+oeIMUOEc8mWkrlTJGONAZaHf1IhbxbCUxKJAEXTyw31uFXVaRTZtLcT9nOapA2rtcXl5fBm/n9PQpb8RRsmtU15iwwcgLeavELk+UvJSGsKvg8h5aJoewBJqumMtReHjNBQ7gB6sSO0dC0dHmKQwF/5qifiVtkXR6gYufr/hjfcnn6PKRXq3r6ocidVZSlC888xb/wTjH9OL7tIA9Ve39PLKYQIDAQAB",
+  "permissions": ["nativeMessaging", "contextMenus", "activeTab", "alarms"],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["common.js", "background.js"]
+  },
+  "action": {
+    "default_title": "svtplay-dl Queue",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "svtplay-dl-queue@svtplay-dl-queue",
+      "strict_min_version": "121.0"
+    }
+  }
+}

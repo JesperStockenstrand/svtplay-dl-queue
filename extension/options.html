@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>svtplay-dl Queue settings</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="options">
+  <h1>svtplay-dl Queue settings</h1>
+
+  <div id="error" class="error" hidden></div>
+
+  <form id="form">
+    <label for="download_dir">Download folder</label>
+    <input id="download_dir" type="text" spellcheck="false" required>
+
+    <label for="binary">Path to svtplay-dl</label>
+    <input id="binary" type="text" spellcheck="false" placeholder="Detect automatically">
+    <p class="hint" id="detected"></p>
+
+    <label for="extra_args">Extra svtplay-dl options</label>
+    <input id="extra_args" type="text" spellcheck="false" placeholder="e.g. -S --merge-subtitle -q 1080">
+    <p class="hint">Added to every download. Run <code>svtplay-dl --help</code> to see the options.</p>
+
+    <label for="max_parallel">Downloads at the same time</label>
+    <select id="max_parallel">
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+    </select>
+
+    <label class="check"><input id="notify" type="checkbox"> Show a notification when a download finishes or fails</label>
+
+    <div class="row">
+      <span id="saved" class="saved" hidden>Saved</span>
+      <button type="submit" class="primary">Save</button>
+    </div>
+  </form>
+
+  <script src="common.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
