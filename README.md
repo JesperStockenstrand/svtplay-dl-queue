@@ -46,7 +46,7 @@ If you don't have them already:
 
 You need Python 3.8 or later. macOS and most Linux distributions include it. On Windows, install it from [python.org](https://www.python.org/downloads/) or with `winget install Python.Python.3.13`.
 
-Download the project (`git clone https://github.com/<your-account>/svtplay-dl-queue.git`, or **Code → Download ZIP** on GitHub) and run the installer from its folder.
+Download the project (`git clone https://github.com/JesperStockenstrand/svtplay-dl-queue.git`, or **Code → Download ZIP** on GitHub) and run the installer from its folder.
 
 **macOS and Linux:**
 
