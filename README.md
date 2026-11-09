@@ -68,6 +68,7 @@ This copies the helper to `~/Library/Application Support/svtplay-dl-queue` (macO
 ## Usage
 
 - Click the toolbar button on a video page and click **Add to queue**. Check **All episodes** to download a whole series.
+- The popup tells you whether svtplay-dl supports the site you're on. The list comes from your installed svtplay-dl, so it's always up to date. Sites without a module can still work when the page has a video player svtplay-dl recognizes, so you can add them anyway.
 - Or right-click a page or a link and choose one of the svtplay-dl items.
 - The badge on the toolbar button shows how many downloads are queued or running.
 - Open **⚙ Settings** in the popup to choose the download folder (default `~/Downloads/svtplay-dl`), video quality and file format, subtitles, extras such as cover images and info files for Kodi/Jellyfin/Plex, how many episodes "All episodes" gets, and how many downloads run at once. Each setting explains what it does, and the page shows the svtplay-dl command your choices produce. Other svtplay-dl options can be added under **Advanced**.
@@ -80,7 +81,7 @@ The helper doubles as a CLI for the same queue:
 ~/Library/Application\ Support/svtplay-dl-queue/bin/svtdl-queue add https://www.svtplay.se/video/...
 ```
 
-Other commands: `list`, `cancel ID`, `retry ID`, `remove ID`, `clear`, `config [key=value ...]` (e.g. `config subtitles=embedded resolution=720`). On Linux the path is `~/.local/share/svtplay-dl-queue/bin/svtdl-queue`. Add an alias if you use it often.
+Other commands: `check URL` (is the site supported?), `list`, `cancel ID`, `retry ID`, `remove ID`, `clear`, `config [key=value ...]` (e.g. `config subtitles=embedded resolution=720`). On Linux the path is `~/.local/share/svtplay-dl-queue/bin/svtdl-queue`. Add an alias if you use it often.
 
 ## Troubleshooting
 

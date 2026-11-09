@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 import uuid
+from urllib.parse import urlparse
 
 APP = "svtplay-dl-queue"
 VERSION = "0.1.0"
@@ -107,6 +108,7 @@ QUEUE_LOCK = os.path.join(DATA, "queue.lock")
 WORKER_LOCK = os.path.join(DATA, "worker.lock")
 LOG_DIR = os.path.join(DATA, "logs")
 WORKER_LOG = os.path.join(DATA, "worker.log")
+SITES_CACHE = os.path.join(DATA, "sites.json")
 
 
 def _ensure_dirs():
@@ -238,6 +240,109 @@ def find_binary(cfg):
             return configured
         return None
     return shutil.which("svtplay-dl", path=search_path())
+
+
+# --------------------------------------------------------------------------
+# Which sites does the installed svtplay-dl support?
+# --------------------------------------------------------------------------
+
+# Run with svtplay-dl's own Python to read its list of site modules.
+SITES_SNIPPET = """
+import json
+from svtplay_dl.service.services import sites
+print(json.dumps([[s.__name__, list(s.supported_domains), list(s.supported_domains_re)]
+                  for s in sites]))
+"""
+
+STREAM_EXTENSIONS = (".m3u8", ".mpd", ".f4m")
+
+
+def _interpreter_for(path):
+    """The interpreter from a script's #! line, as an argv list (or None)."""
+    try:
+        with open(path, "rb") as f:
+            first = f.readline(512).decode("utf-8", "replace").strip()
+    except OSError:
+        return None
+    if not first.startswith("#!"):
+        return None  # not a script, e.g. a standalone executable
+    parts = first[2:].split()
+    if not parts:
+        return None
+    if os.path.basename(parts[0]) == "env":
+        parts = [p for p in parts[1:] if not p.startswith("-")]
+        found = shutil.which(parts[0], path=search_path()) if parts else None
+        return [found] if found else None
+    return parts
+
+
+def load_sites(cfg):
+    """svtplay-dl's site list as [[name, domains, domain_regexes], ...].
+
+    Returns None when it can't be determined. Cached per svtplay-dl version.
+    """
+    binary = find_binary(cfg)
+    if not binary:
+        return None
+    real = os.path.realpath(binary)
+    try:
+        key = "%s:%s" % (real, os.stat(real).st_mtime)
+    except OSError:
+        return None
+    cache = _read_json(SITES_CACHE, {})
+    if isinstance(cache, dict) and cache.get("key") == key:
+        return cache.get("sites")
+    sites = None
+    interpreter = _interpreter_for(real)
+    if interpreter:
+        try:
+            out = subprocess.run(
+                interpreter + ["-I", "-c", SITES_SNIPPET], stdin=subprocess.DEVNULL,
+                capture_output=True, timeout=20, env=dict(os.environ, PATH=search_path()),
+            )
+            if out.returncode == 0:
+                sites = json.loads(out.stdout.decode("utf-8"))
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            sites = None
+    _ensure_dirs()
+    _write_json(SITES_CACHE, {"key": key, "sites": sites})
+    return sites
+
+
+def match_site(sites, url):
+    """Find the svtplay-dl module for a URL, using svtplay-dl's own rules."""
+    netloc = urlparse(url).netloc
+    for name, domains, regexes in sites:
+        for pattern in regexes:
+            try:
+                if re.match(pattern, netloc):
+                    return name
+            except re.error:
+                continue
+        if netloc in domains or netloc in ["www." + d for d in domains]:
+            return name
+    return None
+
+
+def cmd_check_url(url):
+    """Say whether svtplay-dl is likely to handle a URL.
+
+    supported: "yes" (a site module or a direct stream link), "maybe" (no
+    module, but svtplay-dl may still find an embedded player), or "unknown"
+    (the site list couldn't be read).
+    """
+    if not _valid_url(url):
+        return {"supported": "no"}
+    host = urlparse(url).hostname or ""
+    if urlparse(url).path.lower().endswith(STREAM_EXTENSIONS):
+        return {"supported": "yes", "kind": "stream", "host": host}
+    sites = load_sites(load_config())
+    if sites is None:
+        return {"supported": "unknown", "host": host}
+    name = match_site(sites, url)
+    if name:
+        return {"supported": "yes", "kind": "site", "service": name, "host": host}
+    return {"supported": "maybe", "host": host}
 
 
 # --------------------------------------------------------------------------
@@ -442,6 +547,8 @@ def dispatch(msg):
         return cmd_add(msg.get("url"), msg.get("title"), msg.get("all_episodes", False))
     if action == "list":
         return cmd_list()
+    if action == "check_url":
+        return cmd_check_url(msg.get("url"))
     if action == "cancel":
         return cmd_cancel(msg.get("id"))
     if action == "remove":
@@ -708,6 +815,7 @@ USAGE = """svtplay-dl Queue %s
 
 Usage:
   svtdl_queue.py add URL [--all-episodes]   add a download to the queue
+  svtdl_queue.py check URL                  is the site supported by svtplay-dl?
   svtdl_queue.py list                       show the queue
   svtdl_queue.py cancel ID | retry ID | remove ID
   svtdl_queue.py clear                      remove finished downloads
@@ -736,6 +844,16 @@ def run_cli(args):
             print("%s  %-11s%s  %s" % (j["id"], j["status"], pct, j["title"]))
             if j.get("message") and j["status"] in ("failed", "downloading"):
                 print("              " + j["message"])
+    elif cmd == "check" and rest:
+        res = cmd_check_url(rest[0])
+        print({
+            "yes": "Supported" + (" (%s)" % res.get("service") if res.get("service") else
+                                  " (direct stream link)"),
+            "maybe": "No svtplay-dl module for this site; it may still work if the page "
+                     "has an embedded player svtplay-dl recognizes.",
+            "unknown": "Couldn't read svtplay-dl's list of supported sites.",
+            "no": "Not a valid http(s) URL.",
+        }[res["supported"]])
     elif cmd in ("cancel", "retry", "remove") and rest:
         {"cancel": cmd_cancel, "retry": cmd_retry, "remove": cmd_remove}[cmd](rest[0])
     elif cmd == "clear":
@@ -754,7 +872,7 @@ def run_cli(args):
     return 0
 
 
-CLI_COMMANDS = {"add", "list", "cancel", "retry", "remove", "clear", "config",
+CLI_COMMANDS = {"add", "check", "list", "cancel", "retry", "remove", "clear", "config",
                 "help", "-h", "--help", "--version"}
 
 

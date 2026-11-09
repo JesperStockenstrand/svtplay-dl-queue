@@ -138,6 +138,35 @@ async function render() {
   $("clear").disabled = finished.length === 0;
 }
 
+// Tell the user whether svtplay-dl knows this site. Adding is allowed either
+// way: svtplay-dl can also find embedded players on sites it has no module for.
+async function showSiteHint(url) {
+  const hint = $("site-hint");
+  let res;
+  try {
+    res = await host({ action: "check_url", url });
+  } catch (e) {
+    return; // the queue list will show the error
+  }
+  hint.className = "site-hint";
+  if (res.supported === "yes") {
+    hint.classList.add("good");
+    hint.textContent = res.kind === "stream"
+      ? "✓ Direct video stream link, svtplay-dl can download it"
+      : `✓ svtplay-dl supports ${res.host.replace(/^www\./, "")}`;
+    hint.title = "";
+  } else if (res.supported === "maybe") {
+    hint.classList.add("maybe");
+    hint.textContent =
+      "svtplay-dl doesn't know this site. It can still work if the page has a video " +
+      "player that svtplay-dl recognizes, so you can add it and see.";
+  } else {
+    hint.hidden = true;
+    return;
+  }
+  hint.hidden = false;
+}
+
 function isDownloadable(tab) {
   return !!(tab && tab.url && /^https?:\/\//.test(tab.url));
 }
@@ -148,6 +177,7 @@ async function init() {
   if (isDownloadable(currentTab)) {
     urlBox.textContent = currentTab.title || currentTab.url;
     urlBox.title = currentTab.url;
+    showSiteHint(currentTab.url);
   } else {
     urlBox.textContent = "This page can't be downloaded.";
   }
