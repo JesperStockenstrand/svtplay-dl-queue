@@ -32,8 +32,37 @@
 
         <div class="setting">
           <div class="setting-text">
+            <label for="separate_folders">Separate folders for films and series</label>
+            <p>Saves films in one folder and series episodes in another. That's how Plex, Jellyfin and Kodi expect them, with one library for films and one for series. Anything with an episode number counts as a series.</p>
+            <p id="folders_unsupported" class="bad" hidden>This needs svtplay-dl installed with Homebrew, pip or pipx. With your svtplay-dl, everything is saved in the download folder.</p>
+          </div>
+          <div class="setting-control"><input id="separate_folders" type="checkbox" class="switch"></div>
+        </div>
+
+        <div id="folder_fields" class="sub-settings" hidden>
+          <div class="setting stacked">
+            <div class="setting-text">
+              <label for="movies_dir">Films folder</label>
+            </div>
+            <div class="setting-control">
+              <input id="movies_dir" type="text" spellcheck="false" autocomplete="off">
+            </div>
+          </div>
+          <div class="setting stacked">
+            <div class="setting-text">
+              <label for="series_dir">Series folder</label>
+            </div>
+            <div class="setting-control">
+              <input id="series_dir" type="text" spellcheck="false" autocomplete="off">
+            </div>
+          </div>
+          <p class="sub-hint">A name like <code>Movies</code> means a folder inside the download folder. You can also give a full path, e.g. to a media server's library. Right now: <span id="folders_now"></span></p>
+        </div>
+
+        <div class="setting">
+          <div class="setting-text">
             <label for="subfolder">Sort series into folders</label>
-            <p>Saves each series in its own folder named after the show. Films go in a folder called “movies”. Useful when you download many episodes.</p>
+            <p id="subfolder_help">Saves each series in its own folder named after the show. Useful when you download many episodes.</p>
           </div>
           <div class="setting-control"><input id="subfolder" type="checkbox" class="switch"></div>
         </div>

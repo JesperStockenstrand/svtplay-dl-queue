@@ -48,6 +48,9 @@ DEFAULT_CONFIG = {
     # Where to save
     "download_dir": "~/Downloads/svtplay-dl",
     "subfolder": False,
+    "separate_folders": False,  # films and series in different folders
+    "movies_dir": "Movies",  # relative paths are inside download_dir
+    "series_dir": "TV Shows",
     "episode_numbers": False,  # name files show.name.S01E05.episode.name.mp4
     "overwrite": False,
     # Video
@@ -76,6 +79,9 @@ DEFAULT_CONFIG = {
 CONFIG_SCHEMA = {
     "download_dir": ("str",),
     "subfolder": ("bool",),
+    "separate_folders": ("bool",),
+    "movies_dir": ("str",),
+    "series_dir": ("str",),
     "episode_numbers": ("bool",),
     "overwrite": ("bool",),
     "resolution": ("choice", "", "1080", "720", "480"),
@@ -310,6 +316,9 @@ def _validate(key, value):
             raise ValueError("Other options: %s" % e)
     if key == "download_dir" and not value:
         raise ValueError("The download folder can't be empty")
+    if key in ("movies_dir", "series_dir") and not value:
+        raise ValueError("The %s folder can't be empty"
+                         % ("films" if key == "movies_dir" else "series"))
     return value
 
 
@@ -325,7 +334,8 @@ def save_config(changes):
 def build_args(cfg, all_episodes=False):
     """Turn the settings into svtplay-dl command line options."""
     args = []
-    if cfg.get("subfolder"):
+    # With separate folders, svtdl_folders.py makes the per-show folders.
+    if cfg.get("subfolder") and not cfg.get("separate_folders"):
         args.append("--subfolder")
     if cfg.get("episode_numbers"):
         args += ["--filename", EPISODE_FILENAME]
@@ -356,6 +366,36 @@ def build_args(cfg, all_episodes=False):
             args.append("--include-clips")
     args += shlex.split(cfg.get("extra_args") or "")
     return args
+
+
+FOLDERS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "svtdl_folders.py")
+
+
+def folder_paths(cfg):
+    """Absolute films and series folders. Relative ones are inside the download folder."""
+    base = os.path.expanduser(cfg["download_dir"])
+    return {
+        "movies": os.path.join(base, os.path.expanduser(cfg["movies_dir"])),
+        "series": os.path.join(base, os.path.expanduser(cfg["series_dir"])),
+    }
+
+
+def download_command(cfg, binary, all_episodes, url):
+    """The command to run for a download, and extra environment variables.
+
+    Separate film and series folders need svtplay-dl's own Python (see
+    svtdl_folders.py). Without it, svtplay-dl runs directly and the third
+    value is False.
+    """
+    args = build_args(cfg, all_episodes) + [url]
+    if cfg.get("separate_folders"):
+        interpreter = _interpreter_for(os.path.realpath(binary))
+        if interpreter and os.path.isfile(FOLDERS_SCRIPT):
+            opts = dict(folder_paths(cfg), show_folders=bool(cfg.get("subfolder")))
+            return (interpreter + ["-I", FOLDERS_SCRIPT] + args,
+                    {"SVTDL_QUEUE_FOLDERS": json.dumps(opts)}, True)
+        return [binary] + args, {}, False
+    return [binary] + args, {}, True
 
 
 def search_path():
@@ -661,10 +701,14 @@ def cmd_clear():
 
 
 def _config_reply(cfg):
+    binary = find_binary(cfg)
     return {
         "config": cfg,
         "detected_binary": find_binary(dict(cfg, binary="")),
-        "binary_ok": find_binary(cfg) is not None,
+        "binary_ok": binary is not None,
+        # Separate folders need a Python install of svtplay-dl.
+        "folders_supported": bool(binary and _interpreter_for(os.path.realpath(binary))),
+        "folders": folder_paths(cfg),
         "command": build_args(cfg, False),
         "command_all": build_args(cfg, True),
     }
@@ -800,12 +844,16 @@ class Download:
         self.outfile = None
         dest = os.path.expanduser(cfg["download_dir"])
         os.makedirs(dest, exist_ok=True)
-        cmd = [binary] + build_args(cfg, job["all_episodes"]) + [job["url"]]
+        cmd, extra_env, folders_ok = download_command(cfg, binary, job["all_episodes"], job["url"])
         # svtplay-dl is a Python program: make its output unbuffered and UTF-8
         # (Windows would otherwise use the console's legacy code page).
         env = dict(os.environ, PATH=search_path(), PYTHONUNBUFFERED="1",
-                   PYTHONIOENCODING="utf-8")
+                   PYTHONIOENCODING="utf-8", **extra_env)
         self.log_path = os.path.join(LOG_DIR, job["id"] + ".log")
+        if not folders_ok:
+            with open(self.log_path, "a") as log:
+                log.write("NOTE: separate film and series folders need svtplay-dl installed "
+                          "with Homebrew, pip or pipx. Saving in the download folder.\n")
         self.proc = _popen_group(
             cmd, cwd=dest, env=env, stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

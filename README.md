@@ -79,7 +79,7 @@ The installer copies the helper to its data folder (see [Troubleshooting](#troub
 - The popup tells you whether svtplay-dl supports the site you're on. The list comes from your installed svtplay-dl, so it's always up to date. Sites without a module can still work when the page has a video player svtplay-dl recognizes, so you can add them anyway.
 - Or right-click a page or a link and choose one of the svtplay-dl items.
 - The badge on the toolbar button shows how many downloads are queued or running.
-- Open **⚙ Settings** in the popup to choose the download folder (default `~/Downloads/svtplay-dl`), media-server-friendly episode names (`show.name.S01E05.episode.name.mp4`), video quality and file format, subtitles, extras such as cover images and info files for Kodi/Jellyfin/Plex, how many episodes "All episodes" gets, and how many downloads run at once. Each setting explains what it does, and the page shows the svtplay-dl command your choices produce. Other svtplay-dl options can be added under **Advanced**.
+- Open **⚙ Settings** in the popup to choose the download folder (default `~/Downloads/svtplay-dl`), separate folders for films and series (e.g. for Plex/Jellyfin libraries), media-server-friendly episode names (`show.name.S01E05.episode.name.mp4`), video quality and file format, subtitles, extras such as cover images and info files for Kodi/Jellyfin/Plex, how many episodes "All episodes" gets, and how many downloads run at once. Each setting explains what it does, and the page shows the svtplay-dl command your choices produce. Other svtplay-dl options can be added under **Advanced**.
 
 ### Command line
 
@@ -98,6 +98,7 @@ Other commands: `check URL` (is the site supported?), `list`, `cancel ID`, `retr
 | "The helper app isn't installed" | Run the installer and restart the browser. If you installed the extension from a store rather than unpacked, pass its ID: `./install.sh --extension-id <id>` or `install.ps1 -ExtensionId <id>`. |
 | "svtplay-dl wasn't found" | Install it, or set its full path in Settings (`which svtplay-dl` on macOS/Linux, `where.exe svtplay-dl` on Windows shows it). |
 | Linux: nothing happens | Browsers installed as Snap or Flatpak (e.g. Ubuntu's default Firefox) usually can't start helper apps. Use the browser's regular package instead. |
+| Films and series end up in the same folder | Separate folders need svtplay-dl installed with Homebrew, pip or pipx; a standalone `svtplay-dl.exe` can't do it. The Settings page warns when this applies. |
 | Windows: the site hint is missing | The hint needs svtplay-dl installed with pip or pipx. The standalone `svtplay-dl.exe` works for downloads, but its site list can't be read. |
 | A download failed | The last line of svtplay-dl's output is shown under the job. The full output is in `logs/<job id>.log` in the data folder. |
 
@@ -118,6 +119,7 @@ This removes the helper, its browser registrations, the queue and the settings (
 ```
 extension/        the browser extension (Manifest V3, no build step)
 host/             svtdl_queue.py: native host, worker and CLI
+                  svtdl_folders.py: runs svtplay-dl with separate film/series folders
 tests/            end-to-end tests with a fake svtplay-dl
 tools/            make_icons.py regenerates the icons
 install.sh        registers the helper with browsers (macOS, Linux)

@@ -71,7 +71,9 @@ if (-not $Python) {
 
 # 2. Copy the helper to a stable location, so the repo can be moved or deleted.
 New-Item -ItemType Directory -Force -Path $Bin | Out-Null
-Copy-Item (Join-Path $RepoDir 'host\svtdl_queue.py') (Join-Path $Bin 'svtdl_queue.py') -Force
+foreach ($file in 'svtdl_queue.py', 'svtdl_folders.py') {
+  Copy-Item (Join-Path $RepoDir "host\$file") (Join-Path $Bin $file) -Force
+}
 
 # The browser starts this .bat file. It must print nothing but the helper's
 # output, hence @echo off. Written in the console code page so paths with

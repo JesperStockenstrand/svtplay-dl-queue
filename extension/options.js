@@ -1,9 +1,10 @@
 const $ = (id) => document.getElementById(id);
 
-const CHECKBOXES = ["subfolder", "episode_numbers", "overwrite", "all_subtitles", "thumbnail", "nfo",
+const CHECKBOXES = ["separate_folders", "subfolder", "episode_numbers", "overwrite", "all_subtitles", "thumbnail", "nfo",
   "chapters", "include_clips", "notify"];
 const SELECTS = ["resolution", "output_format", "max_parallel"];
-const TEXTS = ["download_dir", "binary", "extra_args", "all_last"];
+const TEXTS = ["download_dir", "movies_dir", "series_dir", "binary", "extra_args", "all_last"];
+let lastReply = null;
 
 let toastTimer = null;
 
@@ -29,6 +30,7 @@ function commandLine(args) {
 }
 
 function fill(reply) {
+  lastReply = reply;
   const { config } = reply;
   for (const key of CHECKBOXES) $(key).checked = !!config[key];
   for (const key of SELECTS) $(key).value = String(config[key]);
@@ -53,6 +55,7 @@ function fill(reply) {
 function updateExamples() {
   const numbered = $("episode_numbers").checked;
   const folders = $("subfolder").checked;
+  const separate = $("separate_folders").checked;
   const ext = $("output_format").value || "mp4";
   let episode = numbered
     ? `show.name.S01E05.episode.name.${ext}`
@@ -60,14 +63,35 @@ function updateExamples() {
   let movie = numbered ? `movie.name.${ext}` : `movie.name-5d6e7f8-svtplay.${ext}`;
   if (folders) {
     episode = "show.name/" + episode;
-    movie = "movies/" + movie;
+    if (!separate) movie = "movies/" + movie;
+  }
+  if (separate) {
+    episode = folderName($("series_dir").value) + "/" + episode;
+    movie = folderName($("movies_dir").value) + "/" + movie;
   }
   $("example_episode").textContent = episode;
   $("example_movie").textContent = movie;
 }
 
-// "All languages" only matters when subtitles are downloaded.
+// Last part of a folder path, for the short examples.
+function folderName(path) {
+  const parts = String(path || "").split(/[\\/]+/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "…";
+}
+
+// "All languages" only matters when subtitles are downloaded; the folder
+// fields only when films and series are kept apart.
 function updateDependent() {
+  const separate = $("separate_folders").checked;
+  $("folder_fields").hidden = !separate;
+  $("subfolder_help").textContent = separate
+    ? "Inside the series folder, saves each series in its own folder named after the show."
+    : "Saves each series in its own folder named after the show. Films go in a folder called “movies”. Useful when you download many episodes.";
+  if (lastReply) {
+    $("folders_unsupported").hidden = !(separate && !lastReply.folders_supported);
+    $("folders_now").textContent =
+      `films in ${lastReply.folders.movies}, series in ${lastReply.folders.series}`;
+  }
   updateExamples();
   const subs = document.querySelector('input[name="subtitles"]:checked');
   const off = !subs || subs.value === "none";

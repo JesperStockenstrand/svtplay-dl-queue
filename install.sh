@@ -76,7 +76,7 @@ fi
 
 # 1. Copy the helper to a stable location, so the repo can be moved or deleted.
 mkdir -p "$DATA/bin"
-cp "$REPO_DIR/host/svtdl_queue.py" "$DATA/bin/svtdl_queue.py"
+cp "$REPO_DIR/host/svtdl_queue.py" "$REPO_DIR/host/svtdl_folders.py" "$DATA/bin/"
 LAUNCHER="$DATA/bin/svtdl-queue"
 cat > "$LAUNCHER" <<EOF
 #!/bin/sh
